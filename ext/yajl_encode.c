@@ -48,21 +48,20 @@ void
 yajl_string_encode(yajl_buf buf, const unsigned char * str,
                    unsigned int len)
 {
-    yajl_string_encode2((const yajl_print_t) &yajl_buf_append, buf, str, len);
+    yajl_string_encode2((const yajl_print_t) &yajl_buf_append, buf, str, len, 0);
 }
 
 void
 yajl_string_encode2(const yajl_print_t print,
                     void * ctx,
                     const unsigned char * str,
-                    unsigned int len)
+                    unsigned int len, unsigned int ascii_only)
 {
     unsigned int beg = 0;
     unsigned int end = 0;    
     char hexBuf[7];
     hexBuf[0] = '\\'; hexBuf[1] = 'u'; hexBuf[2] = '0'; hexBuf[3] = '0';
     hexBuf[6] = 0;
-
     while (end < len) {
         const char * escaped = NULL;
         switch (str[end]) {
@@ -78,6 +77,56 @@ yajl_string_encode2(const yajl_print_t print,
                 if ((unsigned char) str[end] < 32) {
                     CharToHex(str[end], hexBuf + 4);
                     escaped = hexBuf;
+                }
+                else{
+                  if(((unsigned char) str[end] >127) && ascii_only){
+                    print(ctx, (const char *) (str + beg), end - beg);
+                    if((str[end] >> 5) ==  6 && end+1 < len) /*starts with 110 - 2 bytes*/ 
+                    {
+                      int codepoint = ((str[end] & 31) << 6) +  (str[end+1] & 63);
+                      CharToHex(codepoint >> 8, hexBuf+2);
+                      CharToHex(codepoint & 0xFF, hexBuf+4);
+                      print(ctx, hexBuf, strlen(hexBuf));
+                      hexBuf[2] = '0'; hexBuf[3] = '0';
+                      end+= 2;
+                    }
+                    if((str[end] >> 4) == 14 && end+2 < len) /*starts with 1110 - 3 bytes*/ 
+                    {
+                      int codepoint = ((str[end] & 0xF) << 12) +  ((str[end+1] & 63) << 6)  +  (str[end+2] & 63) ;
+                      CharToHex(codepoint >> 8, hexBuf+2);
+                      CharToHex(codepoint & 0xFF, hexBuf+4);
+                      print(ctx, hexBuf, strlen(hexBuf));
+                      hexBuf[2] = '0'; hexBuf[3] = '0';
+                      end += 3;
+                      
+                    }
+                    if((str[end] >>3) == 30 && end+3 < len) /*starts with 11110 - 4 bytes*/ 
+                    {
+                      int first_ten;
+                      int second_ten;
+                      
+                      int codepoint = ((str[end] & 0x7) << 18) +  ((str[end+1] & 63) << 12)  +  ((str[end+2] & 63) << 6) + (str[end+3] & 63) ;
+                      /*encode as surogate pair*/
+                      printf("code point is %d\n", codepoint);
+                      codepoint -= 0x10000;
+                      
+                      first_ten = 0xD800 + (codepoint >> 10);
+                      second_ten = 0xDC00 + (codepoint & 1023);
+                      
+                      CharToHex(first_ten >> 8, hexBuf+2);
+                      CharToHex(first_ten & 0xFF, hexBuf+4);
+                      print(ctx, hexBuf, strlen(hexBuf));
+                      
+                      CharToHex(second_ten >> 8, hexBuf+2);
+                      CharToHex(second_ten & 0xFF, hexBuf+4);
+                      print(ctx, hexBuf, strlen(hexBuf));
+                      hexBuf[2] = '0'; hexBuf[3] = '0';
+                      end += 4;
+                      
+                    }
+                    beg = end ;
+                    end--;
+                  }
                 }
                 break;
         }

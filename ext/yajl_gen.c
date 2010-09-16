@@ -54,6 +54,7 @@ struct yajl_gen_t
 {
     unsigned int depth;
     unsigned int pretty;
+    unsigned int ascii_only;
     const char * indentString;
     yajl_gen_state state[YAJL_MAX_DEPTH];
     yajl_print_t print;
@@ -95,6 +96,7 @@ yajl_gen_alloc2(const yajl_print_t callback,
     memcpy((void *) &(g->alloc), (void *) afs, sizeof(yajl_alloc_funcs));
 
     if (config) {
+        g->ascii_only = config->ascii_only;
         g->pretty = config->beautify;
         g->indentString = config->indentString ? config->indentString : "  ";
     }
@@ -220,7 +222,7 @@ yajl_gen_string(yajl_gen g, const unsigned char * str,
 {
     ENSURE_VALID_STATE; INSERT_SEP; INSERT_WHITESPACE;
     g->print(g->ctx, "\"", 1);
-    yajl_string_encode2(g->print, g->ctx, str, len);
+    yajl_string_encode2(g->print, g->ctx, str, len, g->ascii_only);
     g->print(g->ctx, "\"", 1);
     APPENDED_ATOM;
     FINAL_NEWLINE;

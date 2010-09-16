@@ -210,9 +210,46 @@ describe "Yajl JSON encoder" do
     }.should raise_error(Yajl::EncodeError)
   end
 
-  it "should encode with unicode chars in the key" do
-    hash = {"浅草" => "<- those are unicode"}
-    Yajl::Encoder.encode(hash).should eql("{\"浅草\":\"<- those are unicode\"}")
+  it "should encode with :ascii_only and not escape codepoints below U+0080" do
+    hash = {"\x7F is not escaped" => "<- plain ascii"}
+    encoder = Yajl::Encoder.new(:ascii_only => true)
+    output = encoder.encode(hash)
+    output.should eql("{\"\x7F is not escaped\":\"<- plain ascii\"}")
+  end
+
+  it "should encode with :ascii_only and escape codepoints in the U+0080 to U+07FF" do
+    hash = {"\xC2\x80 to \xDF\xBF are escaped" => "<- those are unicode"}
+    encoder = Yajl::Encoder.new(:ascii_only => true)
+    output = encoder.encode(hash)
+    output.should eql("{\"\\u0080 to \\u07FF are escaped\":\"<- those are unicode\"}")
+  end
+
+  it "should encode with :ascii_only and escape codepoints in the U+0800 to U+FFFF" do
+    hash = {"\xE0\xA0\x80 to \xEF\xBF\xBF are escaped" => "<- those are unicode"}
+    encoder = Yajl::Encoder.new(:ascii_only => true)
+    output = encoder.encode(hash)
+    output.should eql("{\"\\u0800 to \\uFFFF are escaped\":\"<- those are unicode\"}")
+  end
+
+  it "should encode with :ascii_only and escape codepoints in the U+010000 to U+10FFFF" do
+    hash = {"\xF0\x90\x80\x80 and \xF0\xA9\xA8\x9C are escaped" => "<- those are unicode"} #U+029A1C
+    encoder = Yajl::Encoder.new(:ascii_only => true)
+    output = encoder.encode(hash)
+    output.should eql("{\"\\uD800\\uDC00 and \\uD866\\uDE1C are escaped\":\"<- those are unicode\"}")
+  end
+  
+  it "should default to ascii only if default_to_ascii_only set" do
+    Yajl::Encoder.default_to_ascii_only = true
+
+    begin
+      hash = {"\xE1\x8F\x88\xC4\x99" => "<- those are unicode"}
+      encoder = Yajl::Encoder.new()
+      output = encoder.encode(hash)
+      output.should eql("{\"\\u13C8\\u0119\":\"<- those are unicode\"}")
+
+    ensure
+      Yajl::Encoder.default_to_ascii_only = false
+    end
   end
 
   if RUBY_VERSION =~ /^1.9/
